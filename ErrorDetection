@@ -1,0 +1,78 @@
+def error_detection(image_path,true_count):
+# this will only work if the model is atleast 60% sure that it belongs to a particular class
+  thresh = 0.60
+  coordinates = []
+# creating a temporary count, this is where we will be storing our detected objects
+  count = {"nut":0,"screw":0,"bracket":0,"other":0}
+  (boxes, scores, classes, num,image_np) = prediction(image_path)
+  
+  for i in range(len(scores[0])):
+    if scores[0][i]>=thresh:
+      current = boxes[0][i]
+      coordinates.append(current)
+      name = category_index[classes[0][i]]["name"] 
+      # incrementing that object if all requirement meets
+      count[name] = count[name]+1
+      
+  print(count)
+  for obj in count.keys():
+    if count[obj] != true_count[obj]:
+      diff = true_count[obj]-count[obj]
+      # if true count is 5 nuts and model detected 2 nuts then the difference is 3, which means that 3 nuts are missing 
+      if diff>=0:
+        print("Error! {} {} are missing".format(diff,obj))
+      else:
+        print("Error! {} {} are excess".format(diff*-1,obj))
+  return (count,image_np)
+  
+  # in pred_images we are passing im_path and t_count 
+def pred_images(im_path,t_count):
+  # creating a data frame to log our errors 
+  error = pd.DataFrame(columns = list(t_count.keys()))
+  #if im_path is directory then it will go through a for-loop and predict on every image in that directory
+  # and log the errors in that error data frame 
+  if os.path.isdir(im_path):
+    images = os.listdir(im_path)
+    img_names = []
+    for img in images:
+      try:
+        if img.endswith("jpg"):
+          img_path = im_path+"/"+img
+          count,image_np = error_detection(img_path,t_count)
+          img_names.append(img_path)
+
+          #Error Handling
+
+          # if the models detects any error while iterating through every image, it will not stop. 
+          # count changes depending on the image, t_count is fixed 
+          # here we are iterating all the objects in a particular image 
+          for obj in count.keys():
+            if count[obj] < t_count[obj]:
+              #if in the error log file, a row has a value that is greater than the true count, then we have excess
+              for i,val in enumerate(error[obj]):
+                if val > t_count[obj] and count[obj]<t_count[obj]:
+ #then we will take the excess object from that image and add it to another image that is missing that object 
+                  #then we will update the current count
+                  count[obj] += (val - t_count[obj])
+                  #and update the number of excess objects that we borrowed from the error file as well  
+                  error[obj][i] = val-count[obj]
+                  print("{} Handeled".format(obj))
+          error = error.append(count,ignore_index=True)
+      except :
+        continue
+    error["Image"] = img_names
+    error.to_csv("/content/output/error.csv",index=False)
+
+  # else if we are not predicting on the entire directory but a particular image 
+  else :
+    count,image_np = error_detection(im_path,t_count)
+    plt.figure(figsize=(12, 8))
+    plt.imshow(image_np)
+    
+    true_count = {"nut":0,"screw":0,"bracket":0,"other":0}
+true_count["nut"] = int(input("Enter number of Nuts :: "))
+true_count["screw"] = int(input("Enter number of Screw :: "))
+true_count["bracket"] = int(input("Enter number of Bracket :: "))
+true_count["other"] = int(input("Enter number of Other :: "))
+img_path = "/content/Tensorflow/images/20210325_135617.jpg"
+pred_images(img_path,true_count)
