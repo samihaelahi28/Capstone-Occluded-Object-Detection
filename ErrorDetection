@@ -1,0 +1,195 @@
+def error_detection(image_path,true_count,dataf,a):
+
+  thresh = 0.60
+  coordinates = []
+  count = {"nut":0,"screw":0,"bracket":0,"other":0} # creating a temporary count where we will store our detected objects
+  (boxes, scores, classes, num,image_np) = prediction(image_path)   #prediction function is updating the count
+  
+  # looping through the detected objects 
+  for i in range(len(scores[0])):
+    # only consider it if score is greater than 60%
+    if scores[0][i]>=thresh:
+      current = boxes[0][i]
+      coordinates.append(current)
+      # then we will increase the count of that obj in our local count variable
+      name = category_index[classes[0][i]]["name"] 
+      count[name] = count[name]+1
+  
+  count1=count.copy()
+  dataf.append(count1)    
+  print(count)
+  
+
+  # c=0 is basically a variable. We will only increase its value if the true count is equal to count for any of the four objects
+  # For example: if nut is not the same then c will stay 0, if the value of screw is the same then c will be 1
+  #              if bracket is not same then c will stay at 1 and if same then c will be 2 
+  c=0
+  cc=a
+  dd=0
+  for obj in count.keys():
+    if count[obj] != true_count[obj]:
+      diff = true_count[obj]-count[obj]
+      if diff>=0:
+        print("Error! {} {} is/are missing".format(diff,obj))
+        dataf.append("Error! {} {} is/are missing".format(diff,obj))
+        count[obj] = count[obj]+diff
+             
+      else:
+        print("Error! {} {} is/are excess".format(diff*-1,obj))
+        dataf.append("Error! {} {} is/are excess".format(diff*-1,obj))
+        count[obj] = count[obj] - (diff*-1)
+      
+    else:
+      # count=true_count for all the categories
+      c=c+1
+
+
+  coordinates = []
+  count = {"nut":0,"screw":0,"bracket":0,"other":0}
+  (boxes, scores, classes, num,image_np) = prediction(image_path)
+  for i in range(len(scores[0])):
+    if scores[0][i]>=thresh:
+      current = boxes[0][i]
+      coordinates.append(current)
+      name = category_index[classes[0][i]]["name"] 
+      count[name] = count[name]+1
+  for obj in count.keys():
+    
+    if count[obj] != true_count[obj]:
+      
+      diff = true_count[obj]-count[obj]
+      if obj=="other" and diff!=0:
+        print("Remove the other/unknown object and then move to the staging area")
+        dataf.append("Remove the other/unknown object")
+        break
+      if diff>0:
+        #print("Error! {} {} are missing".format(diff,obj))
+        #count[obj] = count[obj]+diff
+        print(" {} {} added to the CURRENT BIN from the PARTS BIN ".format(diff,obj))
+        dataf.append(" {} {} added to the CURRENT BIN from the PARTS BIN ".format(diff,obj))
+      else: 
+        #print("Error! {} {} are excess".format(diff*-1,obj))
+        #count[obj] = count[obj] - (diff*-1)
+        print(" {} {} removed from the CURRENT BIN to the PARTS BIN".format(diff*-1,obj))
+        dataf.append(" {} {} removed from the CURRENT BIN to the PARTS BIN".format(diff*-1,obj))
+  
+  if c==len(count):
+    # Here basically we are checking if the length of the count is 4 and if it is 4 then it means that the
+    # true count and count is same for all the 4 parts. In that case we can move to the staging area
+    print("Entire order is here, move to the staging area")
+    dataf.append("Entire order is here, move to the staging area")
+    # cc=a=0, so now cc=0+1=1. Then it will perform image processing again in the next cell
+    cc=cc+1
+
+  return (count,image_np,cc,dd) # ignore dd but basically we are returning these values from the error detection function
+  #add new variable to pred_images, like what you already have example: im_path
+#def pred_images(im_path,t_count,dataf,order):
+
+#order is a class object that contains the number of I,L, and T parts we need.
+#order is how many exact parts we need. Intead of putting in a function, put it in a variable and then pass that variable into a function
+#Inside of pred_images it figures out how many of each part we need by pulling that information
+#out of the order variable
+
+#Created a class called order and then basically assigned values to an instance variable: nut, screw, bracket, other
+class order:
+  def __init__(self, nut,screw,bracket,other):
+    self.nut = nut
+    self.screw = screw
+    self.bracket = bracket
+    self.other = other
+
+def pred_images(im_path,t_count,dataf):
+  
+  # Checking if its a directory or a single image 
+  error = pd.DataFrame(columns = list(t_count.keys()))
+  if os.path.isdir(im_path):
+  # We go to the else part basically if its a single image. 
+  # For both scenarios, it asks the user for the input and then goes to the error detection function 
+  # Dataf.append is basically a data frame that will later be converted into a txt form
+    images = os.listdir(im_path)
+    img_names = []
+    for img in images:
+      
+      try:
+        a=0
+        b=0
+        if img.endswith("jpg"):
+          
+          img_path = im_path+"/"+img
+          print('Name:{}'.format(img))
+          dataf.append('Name:{}'.format(img))
+          dataf.append("Nuts needed: {}".format(t_count["nut"]))
+          dataf.append("Screws needed: {}".format(t_count["screw"]))
+          dataf.append("bracket needed: {}".format(t_count["bracket"]))
+          dataf.append("Other needed: {}".format(t_count["other"]))
+          count,image_np,c1,d1 = error_detection(img_path,t_count,dataf,a)
+          if c1==1: # C1 is a flag to re check if this is 1 then we have the 4th scenario 
+            print("Performing image processing again")
+            del dataf[-1]
+            del dataf[-1]
+            del dataf[-1]
+            del dataf[-1]
+            del dataf[-1]
+            del dataf[-1]
+            dataf.append(("Performed image processing again"))
+            dataf.append("Nuts needed: {}".format(t_count["nut"]))
+            dataf.append("Screws needed: {}".format(t_count["screw"]))
+            dataf.append("bracket needed: {}".format(t_count["bracket"]))
+            dataf.append("Other needed: {}".format(t_count["other"]))       # calling error detection function again for rechecking
+            count,image_np,c2,d1 = error_detection(im_path,t_count,dataf,a) # a is initially 0 but if true count and count are the same then a becomes 1 and #d1 is just variable for any further changes
+          dataf.append("-------------------------------------------------------------")
+      except :
+        continue
+    error["Image"] = img_names
+    #error.to_csv("/content/output/error.txt",index=False)
+  else :
+    a=0  # this is for the 4th scenario
+    b=0  # we don't need b
+    print('Name:{}'.format(im_path))
+    dataf.append("Name: {}".format(im_path))
+    dataf.append("Nuts needed: {}".format(t_count["nut"]))
+    dataf.append("Screws needed: {}".format(t_count["screw"]))
+    dataf.append("bracket needed: {}".format(t_count["bracket"]))
+    dataf.append("Other needed: {}".format(t_count["other"]))
+    count2,image_np,c1,d1 = error_detection(im_path,t_count,dataf,a)
+    if c1==1:
+            print("\n")
+            print("Performing image processing again")
+            print("\n")
+            del dataf[-1] #deleting wrong values ie values before double check so that we only get the latest values on the txt file
+            del dataf[-1]
+            del dataf[-1]
+            del dataf[-1]
+            del dataf[-1]
+            del dataf[-1]
+            dataf.append(("Performed image processing again"))
+            dataf.append("Nuts needed: {}".format(t_count["nut"]))
+            dataf.append("Screws needed: {}".format(t_count["screw"]))
+            dataf.append("bracket needed: {}".format(t_count["bracket"]))
+            dataf.append("Other needed: {}".format(t_count["other"]))
+            count,image_np,c3,d1 = error_detection(im_path,t_count,dataf,a) # rechecking, basically performing image processing again
+            
+    dataf.append("-------------------------------------------------------------")
+    plt.figure(figsize=(12, 8))
+    plt.imshow(image_np)
+  return dataf
+  # Storing the old scenarios in dq so everything prints out in the txt file one after another
+dq=[]
+orderNumber1 = order(2, 4, 6, 0)
+orderNumber2 = order(3, 5, 8, 0)
+orderNumber3 = order(3, 3, 2, 0)
+
+#true_count = {"nut":orderNumber1.nut,"screw":orderNumber1.screw,"bracket":orderNumber1.bracket,"other":orderNumber1.other}
+#true_count = {"nut":orderNumber2.nut,"screw":orderNumber2.screw,"bracket":orderNumber2.bracket,"other":orderNumber2.other}
+true_count = {"nut":orderNumber3.nut,"screw":orderNumber3.screw,"bracket":orderNumber3.bracket,"other":orderNumber3.other}
+
+dataf=dq
+
+img_path = "/content/Tensorflow/images/20210325_135234.jpg"        # giving the input path for the image; can either be a single image or a directory
+
+pred_images(img_path,true_count,dataf)
+# Put the data in the df and then output the df in a txt file. Basically we have everything stored in dataf
+df = pd.DataFrame(dataf)
+# Here dq has the old data and dataf has the new data
+dq=dataf
+df.to_csv("/content/output/error.txt",index=False) 
